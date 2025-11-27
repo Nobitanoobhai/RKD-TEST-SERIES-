@@ -50,15 +50,13 @@
         input[type="radio"] { display: none; }
         input[type="radio"]:checked + span { color: var(--accent); font-weight: bold; }
         input[type="radio"]:checked + span::before { content: "✔ "; }
-        /* Highlight selected option box */
         input[type="radio"]:checked + span { display: block; }
         .opt-label:has(input:checked) { border-color: var(--accent); background: #eff6ff; }
 
-        /* MODALS (Common) */
+        /* MODALS */
         .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(5px); opacity: 0; transition: opacity 0.3s ease; }
         .modal.show { opacity: 1; }
         
-        /* History Modal Content */
         .modal-content { background: white; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; border-radius: 12px; padding: 20px; text-align: left; }
         .history-card { background: #f8fafc; padding: 12px; border-left: 4px solid var(--accent); margin-bottom: 10px; border-radius: 6px; cursor: pointer; transition: 0.2s; }
         .history-card:hover { background: #e2e8f0; }
@@ -69,7 +67,7 @@
         .badge-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
         .badge-fail { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 
-        /* --- CUSTOM ALERT BOX (White Box, Blue Text) --- */
+        /* Custom Alert */
         .custom-alert-box {
             background: #ffffff; 
             padding: 25px;
@@ -82,12 +80,10 @@
             transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         .modal.show .custom-alert-box { transform: scale(1); }
-
         .alert-msg { color: #2563eb; font-size: 16px; font-weight: 600; margin-bottom: 20px; line-height: 1.4; } 
         .alert-btns { display: flex; gap: 10px; justify-content: center; }
         .btn-alert-ok { background: #2563eb; color: white; width: auto; padding: 10px 25px; margin-top: 0; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); }
         .btn-alert-cancel { background: #f1f5f9; color: #475569; width: auto; padding: 10px 20px; margin-top: 0; border: 1px solid #cbd5e1; }
-
     </style>
 </head>
 <body>
@@ -107,7 +103,7 @@
     <div class="container">
 
         <div id="view-login" class="view active">
-            <h1>🎓 RKD TEST SERIES</h1>
+            <h1>🎓 Student Portal</h1>
             <input type="text" id="login-name" placeholder="Full Name">
             <input type="text" id="login-roll" placeholder="Roll Number">
             <input type="password" id="login-code" placeholder="Secret Code">
@@ -164,7 +160,6 @@
         let currentExamName = "Unknown Exam";
         let myHistoryData = []; 
 
-        // --- NEW CUSTOM MODAL LOGIC ---
         function showCustomModal(msg, isConfirm) {
             return new Promise((resolve) => {
                 const modal = document.getElementById('custom-alert-modal');
@@ -174,7 +169,6 @@
 
                 msgBox.innerText = msg;
                 modal.style.display = 'flex';
-                // Trigger reflow
                 setTimeout(() => modal.classList.add('show'), 10);
                 
                 cancelBtn.style.display = isConfirm ? 'inline-block' : 'none';
@@ -200,18 +194,15 @@
         async function customAlert(msg) { await showCustomModal(msg, false); }
         async function customConfirm(msg) { return await showCustomModal(msg, true); }
 
-
-        // --- 1. AUTO LOGIN ---
         window.onload = async () => {
             const uid = localStorage.getItem('student_id');
             if(uid) {
                 const { data } = await supabase.from('students').select('*').eq('id', uid).single();
-                if(data) successLogin(data);
+                if(data && data.is_online) successLogin(data); // Only login if online is true
                 else localStorage.removeItem('student_id'); 
             }
         };
 
-        // --- 2. LOGIN ---
         async function handleLogin() {
             const name = document.getElementById('login-name').value.trim();
             const roll = document.getElementById('login-roll').value.trim();
@@ -255,8 +246,10 @@
             startRealtimeListener();
         }
 
-        async function handleLogout() {
-            if (currentUser) await supabase.from('students').update({ is_online: false }).eq('id', currentUser.id);
+        async function handleLogout(forced = false) {
+            if(currentUser && !forced) {
+                await supabase.from('students').update({ is_online: false }).eq('id', currentUser.id);
+            }
             localStorage.removeItem('student_id');
             
             currentUser = null;
@@ -267,14 +260,25 @@
             document.getElementById('login-btn').innerText = "Login 🔐";
             
             switchView('view-login');
+
+            if(forced) customAlert("⚠️ Teacher has logged you out.");
         }
 
-        // --- 3. EXAM SYNC ---
+        // --- REALTIME LISTENER (MAGIC FIX) ---
         function startRealtimeListener() {
             supabase.channel('student_channel')
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'exam_state' }, payload => {
                 if(payload.new.status === 'started') startExam(payload.new);
                 if(payload.new.status === 'ended') forceSubmit();
+            })
+            // THIS LISTENS FOR KICK COMMANDS
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' }, payload => {
+                if(currentUser && payload.new.id === currentUser.id) {
+                    if(payload.new.is_online === false) {
+                        // Teacher set is_online = false, so we force logout
+                        handleLogout(true);
+                    }
+                }
             })
             .subscribe();
         }
@@ -286,10 +290,8 @@
 
         async function startExam(state) {
             if(document.getElementById('view-exam').classList.contains('active')) return;
-            
             currentExamName = state.exam_name || "Exam";
             document.getElementById('exam-title').innerText = currentExamName;
-            
             const { data } = await supabase.from('questions').select('*');
             examQuestions = data;
             
@@ -307,10 +309,8 @@
 
             switchView('view-exam');
             document.getElementById('timer-float').style.display = 'block';
-            
             const end = new Date(state.start_time).getTime() + (state.duration_minutes * 60000);
             if(examTimer) clearInterval(examTimer);
-            
             examTimer = setInterval(() => {
                 const now = new Date().getTime();
                 const diff = end - now;
@@ -326,7 +326,6 @@
             }, 1000);
         }
 
-        // --- 4. SUBMIT ---
         async function submitExam(auto = false) {
             if(!auto && !await customConfirm("Are you sure you want to submit?")) return;
             await processResult();
@@ -345,20 +344,12 @@
 
             let score = 0;
             let details = [];
-
             examQuestions.forEach(q => {
                 const sel = document.querySelector(`input[name="q_${q.id}"]:checked`);
                 const ans = sel ? sel.value : "Skipped";
                 const isCorrect = (ans === q.correct_option);
                 if(isCorrect) score++;
-                
-                details.push({ 
-                    question: q.question_text, 
-                    img: q.image_url, 
-                    user: ans, 
-                    real: q.correct_option, 
-                    is_correct: isCorrect 
-                });
+                details.push({ question: q.question_text, img: q.image_url, user: ans, real: q.correct_option, is_correct: isCorrect });
             });
 
             await supabase.from('exam_history').insert({
@@ -387,25 +378,16 @@
             }, 1000);
         }
 
-        // --- 5. HISTORY ---
         async function openHistory() {
             const m = document.getElementById('history-modal');
             m.style.display = 'flex';
             setTimeout(() => m.classList.add('show'), 10);
-
             const div = document.getElementById('history-list');
             document.getElementById('hist-title').innerText = "📜 My History";
             div.innerHTML = "Loading records...";
-            
-            const { data } = await supabase.from('exam_history')
-                .select('*')
-                .eq('student_roll', currentUser.roll_no)
-                .order('created_at', {ascending: false});
-            
+            const { data } = await supabase.from('exam_history').select('*').eq('student_roll', currentUser.roll_no).order('created_at', {ascending: false});
             if(!data || !data.length) { div.innerHTML = "No history found."; return; }
-
             myHistoryData = data;
-
             div.innerHTML = data.map((h, index) => `
                 <div class="history-card" onclick="showHistoryDetails(${index})">
                     <div style="display:flex; justify-content:space-between;">
@@ -426,17 +408,13 @@
             const exam = myHistoryData[index];
             const div = document.getElementById('history-list');
             const title = document.getElementById('hist-title');
-            
             title.innerText = `📝 ${exam.exam_name}`;
-            
             let html = `<button onclick="openHistory()" class="btn-small" style="background:#64748b; margin-bottom:15px; color:white;">← Back to List</button>`;
-            
             if(exam.full_details) {
                 html += exam.full_details.map((d, i) => `
                     <div class="hist-q-box">
                         <p style="font-weight:bold; margin:0 0 10px 0;">Q${i+1}. ${d.question}</p>
                         ${d.img ? `<img src="${d.img}" style="max-width:100%; height:auto; border-radius:5px; margin-bottom:10px;">` : ''}
-                        
                         <div class="hist-res-row">
                             ${d.is_correct 
                                 ? `<span class="badge badge-success">✅ You Selected: ${d.user}</span>`
@@ -446,9 +424,7 @@
                         </div>
                     </div>
                 `).join('');
-            } else {
-                html += "<p>Detailed report not available.</p>";
-            }
+            } else { html += "<p>Detailed report not available.</p>"; }
             div.innerHTML = html;
         }
 
