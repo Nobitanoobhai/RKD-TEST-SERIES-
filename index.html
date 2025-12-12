@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- STRICT VIEWPORT: No Zooming allowed via Meta Tag -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <title>Student Exam Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -20,34 +19,22 @@
             --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
         }
         
-        /* --- FIXED SCROLL LOGIC --- */
-        html {
-            height: 100%;
-            overflow: hidden; /* Prevents the whole browser window from scrolling/bouncing */
-        }
-
+        /* SCROLL ALLOWED, ZOOM BLOCKED */
+        html { height: 100%; overflow: hidden; }
         body { 
             font-family: 'Inter', sans-serif; 
             background: var(--bg-color); 
             color: var(--text-main); 
             margin: 0; 
             height: 100%;
-            
-            /* CRITICAL FIX: Allow vertical scroll (pan-y), Block Zoom */
-            touch-action: pan-y; 
-            
-            overflow-y: auto; /* Internal scrolling allowed */
-            -webkit-overflow-scrolling: touch; /* Smooth scroll for iPhone */
+            touch-action: pan-y; /* Vertical scroll OK, Zoom NO */
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
             user-select: none; 
             -webkit-tap-highlight-color: transparent;
         }
         
-        .container { 
-            max-width: 500px; 
-            margin: 0 auto; 
-            padding: 15px;
-            padding-bottom: 80px; /* Extra space at bottom so submit button isn't hidden */
-        }
+        .container { max-width: 500px; margin: 0 auto; padding: 15px; padding-bottom: 80px; }
         
         .view { 
             display: none; 
@@ -181,7 +168,9 @@
                 <div style="font-size:12px; background:#e0e7ff; color:var(--primary); padding:4px 8px; border-radius:20px; font-weight:600;">Online</div>
             </div>
             <div style="background:#f8fafc; border:1px dashed #cbd5e1; padding:15px; border-radius:10px; margin-bottom:20px;">
-                <p style="margin:0; font-size:13px; color:var(--text-muted);">⏳ Status: <strong id="exam-status-text">Waiting for Teacher...</strong></p>
+                <p style="margin:0; font-size:13px; color:var(--text-muted);">
+                    ⏳ Status: <strong id="exam-status-text">Waiting for Teacher...</strong>
+                </p>
             </div>
             <div class="dash-card card-schedule" onclick="openSchedule()"><h3>📅 Exam Schedule</h3><p>Check upcoming test dates & times</p></div>
             <div class="dash-card card-history" onclick="openHistory()"><h3>📜 Past Results</h3><p>View your performance history</p></div>
@@ -222,9 +211,7 @@
 
     <script>
         // --- DISABLE ZOOM & SCROLL SHORTCUTS ---
-        // Blocks two-finger gestures (Pinch to zoom)
         document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
-        // Blocks CTRL + Scroll (Desktop Zoom)
         document.addEventListener('keydown', function(event) {
             if ((event.ctrlKey || event.metaKey) && (event.key === '+' || event.key === '-' || event.key === '=')) {
                 event.preventDefault();
@@ -296,8 +283,8 @@
             clearDrafts(); currentUser = user; localStorage.setItem('student_id', user.id);
             document.getElementById('dash-name').innerText = user.name.split(' ')[0];
             switchView('view-dashboard');
-            checkExamStatus();
-            setupRealtime();
+            checkExamStatus(); // Initial Check
+            setupRealtime();   // Start Listening
         }
 
         async function handleLogout(forced = false) {
@@ -311,11 +298,29 @@
             document.getElementById('login-btn').disabled = false; document.getElementById('login-btn').innerText = "Secure Login 🔐";
         }
 
-        // --- EXAM LOGIC ---
+        // --- EXAM LOGIC & REALTIME SYNC ---
         function setupRealtime() {
             supabase.channel('student_chan').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'exam_state' }, payload => {
-                if(payload.new.status === 'started') checkExamStatus(); // Re-check status on start
-                if(payload.new.status === 'ended') forceSubmit();
+                
+                // 1. If Exam Starts -> Try to Join
+                if(payload.new.status === 'started') {
+                    checkExamStatus(); 
+                }
+                
+                // 2. If Exam Ends (Stopped by Teacher) -> Force everyone to Dashboard (Auto Update)
+                if(payload.new.status === 'ended') {
+                    console.log("Teacher Stopped Exam");
+                    
+                    // If student was inside exam, force submit/close
+                    if(document.getElementById('view-exam').classList.contains('active')) {
+                        forceSubmit(false); // Submit current answers
+                        showAlert("🛑 Teacher stopped the exam.");
+                    } else {
+                        // If on dashboard, just update text
+                        document.getElementById('exam-status-text').innerText = "Waiting for Teacher...";
+                    }
+                }
+                
             }).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' }, payload => {
                 if(currentUser && payload.new.id === currentUser.id && !payload.new.is_online) handleLogout(true);
             }).subscribe();
@@ -327,24 +332,40 @@
             else document.getElementById('exam-status-text').innerText = "Waiting for Teacher...";
         }
 
-        // ---------- UPGRADED LOOPHOLE FIX ----------
+        // ---------- BULLETPROOF ENTRY CHECK ----------
         async function startExam(state) {
-            if(document.getElementById('view-exam').classList.contains('active')) return;
-
-            // 1. REFRESH CHECK: Did I already finish this?
+            // NOTE: We check history EVEN IF we are already on the dashboard to update text
+            
+            // 1. REFRESH/RE-ENTRY CHECK: Did I already finish this specific exam?
             const { data: history } = await supabase.from('exam_history')
                 .select('id')
                 .eq('student_roll', currentUser.roll_no)
                 .eq('exam_name', state.exam_name) 
                 .limit(1);
 
-            // 2. BLOCK if history exists (This fixes the refresh loop)
+            // 2. IF HISTORY EXISTS -> BLOCK & SHOW STATUS
             if (history && history.length > 0) {
-                document.getElementById('exam-status-text').innerText = "✅/🚫 Exam Completed (No Re-entry)";
-                return; // STOP RIGHT HERE
+                // IMPORTANT: Show that exam is running globally, but USER is blocked
+                document.getElementById('exam-status-text').innerText = "⚠️ Exam is Running (You are Disqualified/Submitted)";
+                
+                // If they tried to refresh while inside, kick them out
+                if(document.getElementById('view-exam').classList.contains('active')) {
+                    switchView('view-dashboard');
+                }
+                
+                // Show Popup ONLY if they just refreshed trying to sneak in
+                // (We can assume if this function runs and view-dashboard is active, they just loaded)
+                if(document.getElementById('view-dashboard').classList.contains('active')) {
+                   // Optional: Only alert if needed, or just let the text speak
+                   // showAlert("⚠️ You have already completed/DQ'd from this exam.");
+                }
+                
+                return; // STOP. DO NOT LOAD QUESTIONS.
             }
             
-            // If passed, start the exam
+            // 3. IF NO HISTORY -> Safe to Enter
+            if(document.getElementById('view-exam').classList.contains('active')) return; // Already in
+
             enableAntiCheat();
             currentExamName = state.exam_name;
             document.getElementById('exam-title').innerText = currentExamName;
@@ -397,29 +418,35 @@
 
         // ---------- STRICT ANTI-CHEAT ----------
         async function forceSubmit(cheat = false) {
-            if(!document.getElementById('view-exam').classList.contains('active')) return;
-            
+            // Stop everything
             clearInterval(examTimer); 
             disableAntiCheat();
             document.getElementById('timer-float').style.display = 'none';
 
+            // If forced by teacher stop, just submit normal
+            // If cheat, pass true
             processResult(cheat);
         }
 
         async function processResult(isDQ = false) {
             let score = 0, details = [];
-            if(!isDQ) {
+            
+            // Calculate Score (only if not DQ and questions loaded)
+            if(!isDQ && examQuestions.length > 0) {
                 examQuestions.forEach(q => {
                     const ans = document.querySelector(`input[name="q_${q.id}"]:checked`)?.value || "Skipped";
                     const correct = (ans === q.correct_option);
                     if(correct) score++;
                     details.push({ question: q.question_text, img: q.image_url, user: ans, real: q.correct_option, is_correct: correct });
                 });
-            } else {
+            } else if (isDQ) {
                 details = [{ question: "System", user: "Disqualified (Tab Switch)", real: "-", is_correct: false }];
+            } else {
+                // Teacher stopped exam manually
+                 details = [{ question: "System", user: "Exam Stopped by Teacher", real: "-", is_correct: false }];
             }
 
-            // CRITICAL: Insert into DB immediately so Refresh checks fail
+            // INSERT INTO DB IMMEDIATELY (Locks the refresh loophole)
             await supabase.from('exam_history').insert({
                 student_name: currentUser.name, student_roll: currentUser.roll_no, secret_code: currentUser.secret_code,
                 exam_name: currentExamName + (isDQ?" (DQ)":""), score: score, total_marks: examQuestions.length, full_details: details
@@ -427,11 +454,14 @@
 
             localStorage.removeItem('exam_backup'); 
             
+            // UI HANDLING
             if(isDQ) {
+                // If Cheating -> KICK TO DASHBOARD
                 await showAlert("⚠️ Cheating Detected! Exam Disqualified.");
-                document.getElementById('exam-status-text').innerText = "🚫 Disqualified";
+                document.getElementById('exam-status-text').innerText = "🚫 Disqualified (Exam Running)";
                 switchView('view-dashboard');
             } else {
+                // Normal Submit or Time Up
                 document.getElementById('res-score').innerText = score; document.getElementById('res-total').innerText = examQuestions.length;
                 switchView('view-result');
                 document.getElementById('exam-status-text').innerText = "✅ Exam Submitted";
