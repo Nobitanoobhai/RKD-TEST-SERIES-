@@ -2,37 +2,52 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- STRICT VIEWPORT: No Zooming allowed via Meta Tag -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <title>Student Exam Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            /* Final Professional Theme */
             --bg-color: #f8fafc;
             --text-main: #0f172a;
             --text-muted: #64748b;
-            --primary: #4f46e5;    /* Indigo */
-            --secondary: #9333ea;  /* Purple */
+            --primary: #4f46e5;
+            --secondary: #9333ea;
             --success: #16a34a;
             --danger: #dc2626;
             --border: #e2e8f0;
             --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
         }
         
-        html { scroll-behavior: smooth; touch-action: manipulation; }
+        /* --- FIXED SCROLL LOGIC --- */
+        html {
+            height: 100%;
+            overflow: hidden; /* Prevents the whole browser window from scrolling/bouncing */
+        }
+
         body { 
             font-family: 'Inter', sans-serif; 
             background: var(--bg-color); 
             color: var(--text-main); 
-            margin: 0; padding: 15px; 
+            margin: 0; 
+            height: 100%;
+            
+            /* CRITICAL FIX: Allow vertical scroll (pan-y), Block Zoom */
+            touch-action: pan-y; 
+            
+            overflow-y: auto; /* Internal scrolling allowed */
+            -webkit-overflow-scrolling: touch; /* Smooth scroll for iPhone */
             user-select: none; 
             -webkit-tap-highlight-color: transparent;
-            min-height: 100vh;
-            overflow-x: hidden;
         }
         
-        .container { max-width: 500px; margin: 0 auto; }
+        .container { 
+            max-width: 500px; 
+            margin: 0 auto; 
+            padding: 15px;
+            padding-bottom: 80px; /* Extra space at bottom so submit button isn't hidden */
+        }
         
         .view { 
             display: none; 
@@ -126,6 +141,11 @@
         .alert-btns { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
         .btn-alert { margin: 0; padding: 10px 20px; width: auto; }
         .btn-cancel { background: #f1f5f9; color: var(--text-main); }
+        
+        .btn-refresh-float {
+            width: 100%; background: #e2e8f0; color: #334155; margin-bottom: 20px;
+            font-size: 14px; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
     </style>
 </head>
 <body oncontextmenu="return false;"> 
@@ -154,6 +174,8 @@
         </div>
 
         <div id="view-dashboard" class="view">
+            <button class="btn-refresh-float" onclick="location.reload()">↻ Refresh Portal</button>
+            
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <h2 style="margin:0;">Hi, <span id="dash-name" style="color:var(--primary);">Student</span></h2>
                 <div style="font-size:12px; background:#e0e7ff; color:var(--primary); padding:4px 8px; border-radius:20px; font-weight:600;">Online</div>
@@ -199,7 +221,17 @@
     </div>
 
     <script>
-        // CONFIG
+        // --- DISABLE ZOOM & SCROLL SHORTCUTS ---
+        // Blocks two-finger gestures (Pinch to zoom)
+        document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+        // Blocks CTRL + Scroll (Desktop Zoom)
+        document.addEventListener('keydown', function(event) {
+            if ((event.ctrlKey || event.metaKey) && (event.key === '+' || event.key === '-' || event.key === '=')) {
+                event.preventDefault();
+            }
+        });
+
+        // --- CONFIG ---
         const SUPABASE_URL = 'https://byezxlkkckbliduofdco.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5ZXp4bGtrY2tibGlkdW9mZGNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMzQ2MjUsImV4cCI6MjA3OTcxMDYyNX0._HEdU0IxVH4RPsdejJsY5gd9uKO7fdaNTILYxhXaZl0';
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -229,7 +261,7 @@
                 const { data } = await supabase.from('students').select('*').eq('id', uid).single();
                 if(data && data.is_online) successLogin(data);
                 else {
-                    localStorage.removeItem('student_id'); // Ensure clean start if server says offline
+                    localStorage.removeItem('student_id');
                 }
             }
         };
@@ -271,12 +303,9 @@
         async function handleLogout(forced = false) {
             if(redirectIntv) clearInterval(redirectIntv);
             if(currentUser && !forced) await supabase.from('students').update({ is_online: false }).eq('id', currentUser.id);
-            
-            // CLEANUP EVERYTHING ON LOGOUT/KICK
             localStorage.removeItem('student_id'); 
-            localStorage.removeItem('exam_backup'); // Clear backup too
+            localStorage.removeItem('exam_backup'); 
             currentUser = null;
-            
             switchView('view-login');
             if(forced) showAlert("⚠️ Session Ended (Logged out by Admin)");
             document.getElementById('login-btn').disabled = false; document.getElementById('login-btn').innerText = "Secure Login 🔐";
@@ -285,7 +314,7 @@
         // --- EXAM LOGIC ---
         function setupRealtime() {
             supabase.channel('student_chan').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'exam_state' }, payload => {
-                if(payload.new.status === 'started') startExam(payload.new);
+                if(payload.new.status === 'started') checkExamStatus(); // Re-check status on start
                 if(payload.new.status === 'ended') forceSubmit();
             }).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' }, payload => {
                 if(currentUser && payload.new.id === currentUser.id && !payload.new.is_online) handleLogout(true);
@@ -295,30 +324,32 @@
         async function checkExamStatus() {
             const { data } = await supabase.from('exam_state').select('*').eq('id', 1).single();
             if(data && data.status === 'started') startExam(data);
+            else document.getElementById('exam-status-text').innerText = "Waiting for Teacher...";
         }
 
-        // ---------- UPGRADED LOGIC: PREVENT RE-ENTRY ----------
+        // ---------- UPGRADED LOOPHOLE FIX ----------
         async function startExam(state) {
             if(document.getElementById('view-exam').classList.contains('active')) return;
 
-            // 1. CHECK IF ALREADY SUBMITTED
+            // 1. REFRESH CHECK: Did I already finish this?
             const { data: history } = await supabase.from('exam_history')
                 .select('id')
                 .eq('student_roll', currentUser.roll_no)
-                .eq('exam_name', state.exam_name) // Simple check by name
+                .eq('exam_name', state.exam_name) 
                 .limit(1);
 
+            // 2. BLOCK if history exists (This fixes the refresh loop)
             if (history && history.length > 0) {
-                document.getElementById('exam-status-text').innerText = "✅ Exam Already Completed (Wait for results)";
-                return; // STOP HERE, DO NOT START
+                document.getElementById('exam-status-text').innerText = "✅/🚫 Exam Completed (No Re-entry)";
+                return; // STOP RIGHT HERE
             }
             
+            // If passed, start the exam
             enableAntiCheat();
             currentExamName = state.exam_name;
             document.getElementById('exam-title').innerText = currentExamName;
             document.getElementById('exam-status-text').innerText = "🔥 Exam in Progress...";
             
-            // FETCH QUESTIONS (Snapshot vs Live)
             if(state.linked_queue_id) {
                 const { data } = await supabase.from('exam_queue').select('question_snapshot').eq('id', state.linked_queue_id).single();
                 examQuestions = (data && data.question_snapshot) ? data.question_snapshot : [];
@@ -327,10 +358,9 @@
                 examQuestions = data || [];
             }
             
-            // RENDER
             const div = document.getElementById('questions-area');
             if(!examQuestions || examQuestions.length === 0) {
-                div.innerHTML = "<div style='text-align:center; padding:20px; color:gray;'>No questions found. Waiting for teacher...</div>";
+                div.innerHTML = "<div style='text-align:center; padding:20px; color:gray;'>No questions found. Waiting...</div>";
             } else {
                 div.innerHTML = examQuestions.map((q, i) => `
                     <div class="question-box">
@@ -359,28 +389,24 @@
                 }
             }, 1000);
         }
-        // -----------------------------------------------------------------
 
         async function submitExam(auto = false) {
             if(!auto && !await showConfirm("Submit Answers?")) return;
             processResult(false);
         }
 
-        // ---------- STRICT ANTI-CHEAT TRIGGER ----------
+        // ---------- STRICT ANTI-CHEAT ----------
         async function forceSubmit(cheat = false) {
             if(!document.getElementById('view-exam').classList.contains('active')) return;
             
-            // Stop everything immediately
             clearInterval(examTimer); 
             disableAntiCheat();
             document.getElementById('timer-float').style.display = 'none';
 
-            // Submit logic
             processResult(cheat);
         }
 
         async function processResult(isDQ = false) {
-            // Save to DB
             let score = 0, details = [];
             if(!isDQ) {
                 examQuestions.forEach(q => {
@@ -393,7 +419,7 @@
                 details = [{ question: "System", user: "Disqualified (Tab Switch)", real: "-", is_correct: false }];
             }
 
-            // Insert Record
+            // CRITICAL: Insert into DB immediately so Refresh checks fail
             await supabase.from('exam_history').insert({
                 student_name: currentUser.name, student_roll: currentUser.roll_no, secret_code: currentUser.secret_code,
                 exam_name: currentExamName + (isDQ?" (DQ)":""), score: score, total_marks: examQuestions.length, full_details: details
@@ -401,14 +427,11 @@
 
             localStorage.removeItem('exam_backup'); 
             
-            // SPECIAL HANDLING FOR CHEATERS
             if(isDQ) {
-                // Show Popup and Kick to Dashboard
-                await showAlert("⚠️ You are trying to cheat! Exam Disqualified.");
+                await showAlert("⚠️ Cheating Detected! Exam Disqualified.");
                 document.getElementById('exam-status-text').innerText = "🚫 Disqualified";
                 switchView('view-dashboard');
             } else {
-                // Normal Success View
                 document.getElementById('res-score').innerText = score; document.getElementById('res-total').innerText = examQuestions.length;
                 switchView('view-result');
                 document.getElementById('exam-status-text').innerText = "✅ Exam Submitted";
@@ -422,7 +445,6 @@
         }
 
         function enableAntiCheat() {
-            // 0 Tolerance: Trigger on FIRST hidden event
             document.documentElement.requestFullscreen().catch(e=>{});
             document.addEventListener("visibilitychange", checkTab);
         }
@@ -431,10 +453,9 @@
             if(document.fullscreenElement) document.exitFullscreen().catch(e=>{});
         }
         
-        // ---------- 0 WARNING LOGIC ----------
         function checkTab() {
             if(document.hidden) {
-                forceSubmit(true); // IMMEDIATE DQ
+                forceSubmit(true); // 0 WARNINGS = KICK
             }
         }
 
