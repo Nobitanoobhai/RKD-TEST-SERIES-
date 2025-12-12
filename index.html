@@ -5,97 +5,139 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Student Exam Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root { --bg:#f1f5f9; --card:#ffffff; --text:#0f172a; --accent:#2563eb; --green:#22c55e; --red:#ef4444; }
+        :root {
+            /* Final Professional Theme */
+            --bg-color: #f8fafc;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --primary: #4f46e5;    /* Indigo */
+            --secondary: #9333ea;  /* Purple */
+            --success: #16a34a;
+            --danger: #dc2626;
+            --border: #e2e8f0;
+            --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+        }
         
-        html { scroll-behavior: smooth; }
+        html { scroll-behavior: smooth; touch-action: manipulation; }
         body { 
-            font-family: 'Segoe UI', sans-serif; 
-            background: var(--bg); 
-            color: var(--text); 
-            margin: 0; 
-            padding: 20px; 
+            font-family: 'Inter', sans-serif; 
+            background: var(--bg-color); 
+            color: var(--text-main); 
+            margin: 0; padding: 15px; 
             user-select: none; 
             -webkit-tap-highlight-color: transparent;
+            min-height: 100vh;
             overflow-x: hidden;
         }
         
         .container { max-width: 500px; margin: 0 auto; }
         
-        /* View Screens */
-        .view { display: none; background: var(--card); padding: 25px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; animation: fadeIn 0.4s; }
-        .active { display: block; }
-        @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-
-        /* Inputs & Buttons */
-        input { width: 100%; padding: 14px; margin: 8px 0; border: 2px solid #e2e8f0; border-radius: 10px; box-sizing: border-box; font-size: 16px; outline: none; transition: 0.3s; }
-        input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
-        
-        button { width: 100%; padding: 14px; background: var(--accent); color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; transition: 0.2s; box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2); }
-        button:active { transform: scale(0.97); }
-        
-        .btn-outline { background: transparent; border: 2px solid var(--accent); color: var(--accent); margin-top: 10px; box-shadow: none; }
-        .btn-logout { background: var(--red); margin-top: 20px; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2); }
-        .btn-small { width: auto; padding: 8px 15px; font-size: 12px; margin: 0; }
-
-        /* Exam UI */
-        #timer-float { position: fixed; top: 15px; right: 15px; background: #1e293b; color: #fff; padding: 8px 15px; border-radius: 30px; font-weight: bold; font-family: monospace; z-index: 100; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
-        
-        .question-box { text-align: left; border-bottom: 1px solid #f1f5f9; padding: 20px 0; }
-        .q-img { max-width: 100%; border-radius: 8px; margin: 10px 0; display: block; }
-        
-        .opt-label { display: block; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 8px; cursor: pointer; transition: 0.2s; }
-        .opt-label:active { background: #f1f5f9; transform: scale(0.99); }
-        input[type="radio"] { display: none; }
-        input[type="radio"]:checked + span { color: var(--accent); font-weight: bold; }
-        input[type="radio"]:checked + span::before { content: "✔ "; }
-        input[type="radio"]:checked + span { display: block; }
-        .opt-label:has(input:checked) { border-color: var(--accent); background: #eff6ff; }
-
-        /* MODALS */
-        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(5px); opacity: 0; transition: opacity 0.3s ease; }
-        .modal.show { opacity: 1; }
-        
-        .modal-content { background: white; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; border-radius: 12px; padding: 20px; text-align: left; }
-        .history-card { background: #f8fafc; padding: 12px; border-left: 4px solid var(--accent); margin-bottom: 10px; border-radius: 6px; cursor: pointer; transition: 0.2s; }
-        .history-card:hover { background: #e2e8f0; }
-
-        .hist-q-box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: #fff; }
-        .hist-res-row { display: flex; gap: 10px; margin-top: 10px; font-size: 14px; font-weight: bold; }
-        .badge { padding: 6px 10px; border-radius: 6px; color: white; display: inline-block; }
-        .badge-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-        .badge-fail { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-
-        /* Custom Alert */
-        .custom-alert-box {
-            background: #ffffff; 
-            padding: 25px;
-            border-radius: 14px;
-            text-align: center;
-            max-width: 320px;
-            width: 85%;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            transform: scale(0.9);
-            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        .view { 
+            display: none; 
+            background: white; 
+            padding: 25px; 
+            border-radius: 16px; 
+            box-shadow: var(--card-shadow); 
+            border: 1px solid var(--border);
+            text-align: center; 
+            animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
         }
-        .modal.show .custom-alert-box { transform: scale(1); }
-        .alert-msg { color: #2563eb; font-size: 16px; font-weight: 600; margin-bottom: 20px; line-height: 1.4; } 
-        .alert-btns { display: flex; gap: 10px; justify-content: center; }
-        .btn-alert-ok { background: #2563eb; color: white; width: auto; padding: 10px 25px; margin-top: 0; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); }
-        .btn-alert-cancel { background: #f1f5f9; color: #475569; width: auto; padding: 10px 20px; margin-top: 0; border: 1px solid #cbd5e1; }
+        .active { display: block; }
+        @keyframes popIn { from { opacity:0; transform:scale(0.98); } to { opacity:1; transform:scale(1); } }
+
+        h1, h2, h3 { margin-top: 0; font-weight: 700; letter-spacing: -0.025em; }
+        
+        input { 
+            width: 100%; padding: 14px; margin: 8px 0; 
+            border: 1px solid var(--border); 
+            background: #f1f5f9;
+            border-radius: 10px; color: var(--text-main);
+            font-size: 16px; outline: none; transition: border 0.1s; 
+            font-family: inherit;
+        }
+        input:focus { border-color: var(--primary); background: white; }
+        
+        button { 
+            width: 100%; padding: 14px; 
+            background: var(--primary); 
+            color: white; border: none; border-radius: 10px; 
+            font-size: 15px; font-weight: 600; cursor: pointer; 
+            margin-top: 15px; 
+            transition: transform 0.05s; 
+            box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2);
+        }
+        button:active { transform: scale(0.96); }
+        button:disabled { background: #cbd5e1; transform: none; box-shadow: none; }
+        
+        .dash-card {
+            text-align: left; padding: 20px; border-radius: 12px;
+            margin-bottom: 15px; cursor: pointer; color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transition: transform 0.1s;
+            position: relative; overflow: hidden;
+        }
+        .dash-card:active { transform: scale(0.98); }
+        .dash-card h3 { margin: 0; font-size: 18px; }
+        .dash-card p { margin: 5px 0 0 0; font-size: 13px; opacity: 0.9; }
+        
+        .card-schedule { background: linear-gradient(135deg, #3b82f6, #2563eb); } 
+        .card-history { background: linear-gradient(135deg, #8b5cf6, #7c3aed); } 
+        .card-logout { background: white; border: 1px solid #fee2e2; color: var(--danger); text-align: center; padding: 12px; }
+
+        .question-box { text-align: left; border-bottom: 1px solid var(--border); padding: 20px 0; }
+        .q-img { max-width: 100%; border-radius: 8px; margin: 10px 0; border: 1px solid var(--border); }
+        
+        .opt-label { 
+            display: flex; align-items: center; padding: 12px; 
+            background: #fff; border: 1px solid var(--border); 
+            border-radius: 10px; margin-top: 8px; 
+            cursor: pointer; transition: 0.1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .opt-label:active { background: #f8fafc; }
+        input[type="radio"] { display: none; }
+        input[type="radio"]:checked + span { color: var(--primary); font-weight: 600; }
+        .opt-label:has(input:checked) { border-color: var(--primary); background: #eef2ff; box-shadow: 0 0 0 1px var(--primary); }
+
+        #timer-float { 
+            position: fixed; top: 15px; right: 15px; 
+            background: #1e293b; color: #fff; 
+            padding: 8px 16px; border-radius: 20px; 
+            font-weight: 700; font-family: monospace; z-index: 100; 
+            display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 2000; backdrop-filter: blur(3px); }
+        .modal.show { display: flex; } 
+        
+        .modal-content { 
+            background: white; width: 90%; max-width: 450px; max-height: 80vh; 
+            overflow-y: auto; border-radius: 14px; padding: 20px; text-align: left; 
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); 
+            animation: slideUp 0.15s ease-out;
+        }
+        @keyframes slideUp { from { transform:translateY(20px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+        
+        .list-item { padding: 12px; border-bottom: 1px solid var(--border); }
+        
+        .alert-box { background: white; padding: 25px; border-radius: 14px; text-align: center; width: 80%; max-width: 300px; animation: popIn 0.15s; }
+        .alert-btns { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+        .btn-alert { margin: 0; padding: 10px 20px; width: auto; }
+        .btn-cancel { background: #f1f5f9; color: var(--text-main); }
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;"> 
 
     <div id="timer-float">00:00</div>
 
-    <div id="custom-alert-modal" class="modal">
-        <div class="custom-alert-box">
-            <div id="custom-alert-msg" class="alert-msg">Alert Message</div>
+    <div id="custom-alert" class="modal">
+        <div class="alert-box">
+            <h3 id="alert-text" style="margin-bottom:10px;">Message</h3>
             <div class="alert-btns">
-                <button id="alert-cancel-btn" class="btn-alert-cancel">Cancel</button>
-                <button id="alert-ok-btn" class="btn-alert-ok">OK</button>
+                <button id="alert-cancel" class="btn-alert btn-cancel">Cancel</button>
+                <button id="alert-ok" class="btn-alert">OK</button>
             </div>
         </div>
     </div>
@@ -103,53 +145,61 @@
     <div class="container">
 
         <div id="view-login" class="view active">
-            <h1>🎓 Student Portal</h1>
-            <input type="text" id="login-name" placeholder="Full Name">
-            <input type="text" id="login-roll" placeholder="Roll Number">
-            <input type="password" id="login-code" placeholder="Secret Code">
-            <button onclick="handleLogin()" id="login-btn">Login 🔐</button>
+            <h1 style="color:var(--primary); margin-bottom:5px;">Student Portal</h1>
+            <p style="color:var(--text-muted); font-size:14px;">Please login to continue</p>
+            <input type="text" id="login-name" placeholder="Full Name" oninput="saveDraft('name', this.value)">
+            <input type="text" id="login-roll" placeholder="Roll Number" oninput="saveDraft('roll', this.value)">
+            <input type="password" id="login-code" placeholder="Secret Code" oninput="saveDraft('code', this.value)">
+            <button onclick="handleLogin()" id="login-btn">Secure Login 🔐</button>
         </div>
 
         <div id="view-dashboard" class="view">
-            <h2 style="color:#1e293b;">Hi, <span id="dash-name">Student</span> 👋</h2>
-            <div style="background:#eff6ff; padding:20px; border-radius:12px; border:1px solid #dbeafe; margin:20px 0;">
-                <h3 style="color:#2563eb; margin:0;">⏳ Status: Waiting</h3>
-                <p style="font-size:13px; color:#475569;">Exam will start automatically.</p>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="margin:0;">Hi, <span id="dash-name" style="color:var(--primary);">Student</span></h2>
+                <div style="font-size:12px; background:#e0e7ff; color:var(--primary); padding:4px 8px; border-radius:20px; font-weight:600;">Online</div>
             </div>
-            <button onclick="openHistory()" class="btn-outline">📜 View Past Results</button>
-            <button onclick="handleLogout()" class="btn-logout">Logout</button>
+            <div style="background:#f8fafc; border:1px dashed #cbd5e1; padding:15px; border-radius:10px; margin-bottom:20px;">
+                <p style="margin:0; font-size:13px; color:var(--text-muted);">⏳ Status: <strong id="exam-status-text">Waiting for Teacher...</strong></p>
+            </div>
+            <div class="dash-card card-schedule" onclick="openSchedule()"><h3>📅 Exam Schedule</h3><p>Check upcoming test dates & times</p></div>
+            <div class="dash-card card-history" onclick="openHistory()"><h3>📜 Past Results</h3><p>View your performance history</p></div>
+            <div class="dash-card card-logout" onclick="handleLogout()">Log Out</div>
         </div>
 
-        <div id="view-exam" class="view" style="max-width: 650px;">
-            <h3 id="exam-title" style="border-bottom:2px solid #f1f5f9; padding-bottom:10px;">Current Exam</h3>
+        <div id="view-exam" class="view" style="max-width: 600px; padding: 20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px;">
+                <h3 id="exam-title" style="margin:0;">Exam</h3>
+                <span style="font-size:11px; color:var(--danger); font-weight:bold;">⚠️ NO TAB SWITCHING</span>
+            </div>
             <div id="questions-area"></div>
             <button onclick="submitExam()">Submit Final Answers ✅</button>
         </div>
 
         <div id="view-result" class="view">
-            <h1>🎉 Exam Ended!</h1>
-            <div style="background:#f0fdf4; padding:20px; border-radius:50%; width:120px; height:120px; display:flex; align-items:center; justify-content:center; margin:20px auto; border:4px solid #bbf7d0;">
-                <div>
-                    <div style="font-size:14px; color:#166534;">SCORE</div>
-                    <div style="font-size:32px; font-weight:bold; color:#15803d;"><span id="res-score">0</span>/<span id="res-total">0</span></div>
-                </div>
+            <div style="width:80px; height:80px; background:#dcfce7; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 15px auto;">
+                <span style="font-size:30px;">🎉</span>
             </div>
-            <p style="color:#ef4444; font-size:14px; font-weight:bold;">Redirecting in <span id="redirect-time">10</span>s...</p>
+            <h2 style="color:var(--success);">Exam Submitted!</h2>
+            <div style="font-size:36px; font-weight:800; color:#166534; margin:10px 0;">
+                <span id="res-score">0</span><span style="font-size:20px; color:#86efac;">/</span><span id="res-total" style="font-size:20px; color:#166534;">0</span>
+            </div>
+            <p style="font-size:13px;">Returning to dashboard in <span id="redirect-time">10</span>s</p>
         </div>
 
     </div>
 
-    <div id="history-modal" class="modal">
+    <div id="modal-list" class="modal">
         <div class="modal-content">
-            <div style="display:flex; justify-content:space-between; margin-bottom:15px; align-items:center;">
-                <h3 id="hist-title" style="margin:0;">📜 My History</h3>
-                <button onclick="closeHistory()" class="btn-small" style="background:#ef4444; color:white; border:none;">Close</button>
+            <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+                <h3 id="modal-title">List</h3>
+                <button onclick="closeModal()" style="width:auto; padding:5px 10px; font-size:12px; margin:0; background:#f1f5f9; color:black;">Close</button>
             </div>
-            <div id="history-list">Loading...</div>
+            <div id="modal-body">Loading...</div>
         </div>
     </div>
 
     <script>
+        // CONFIG
         const SUPABASE_URL = 'https://byezxlkkckbliduofdco.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5ZXp4bGtrY2tibGlkdW9mZGNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMzQ2MjUsImV4cCI6MjA3OTcxMDYyNX0._HEdU0IxVH4RPsdejJsY5gd9uKO7fdaNTILYxhXaZl0';
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -157,130 +207,89 @@
         let currentUser = null;
         let examQuestions = [];
         let examTimer = null;
-        let currentExamName = "Unknown Exam";
-        let myHistoryData = []; 
-
-        function showCustomModal(msg, isConfirm) {
-            return new Promise((resolve) => {
-                const modal = document.getElementById('custom-alert-modal');
-                const msgBox = document.getElementById('custom-alert-msg');
-                const okBtn = document.getElementById('alert-ok-btn');
-                const cancelBtn = document.getElementById('alert-cancel-btn');
-
-                msgBox.innerText = msg;
-                modal.style.display = 'flex';
-                setTimeout(() => modal.classList.add('show'), 10);
-                
-                cancelBtn.style.display = isConfirm ? 'inline-block' : 'none';
-
-                const closeModal = () => {
-                    modal.classList.remove('show');
-                    setTimeout(() => modal.style.display = 'none', 300);
-                    cleanup();
-                };
-
-                const handleOk = () => { closeModal(); resolve(true); };
-                const handleCancel = () => { closeModal(); resolve(false); };
-                
-                okBtn.addEventListener('click', handleOk, {once:true});
-                if(isConfirm) cancelBtn.addEventListener('click', handleCancel, {once:true});
-
-                function cleanup() {
-                    okBtn.removeEventListener('click', handleOk);
-                    cancelBtn.removeEventListener('click', handleCancel);
-                }
-            });
+        let currentExamName = "Exam";
+        let redirectIntv = null;
+        
+        // --- PERSISTENCE ---
+        function saveDraft(key, val) { localStorage.setItem('draft_'+key, val); }
+        function loadDrafts() {
+            if(localStorage.getItem('draft_name')) document.getElementById('login-name').value = localStorage.getItem('draft_name');
+            if(localStorage.getItem('draft_roll')) document.getElementById('login-roll').value = localStorage.getItem('draft_roll');
+            if(localStorage.getItem('draft_code')) document.getElementById('login-code').value = localStorage.getItem('draft_code');
         }
-        async function customAlert(msg) { await showCustomModal(msg, false); }
-        async function customConfirm(msg) { return await showCustomModal(msg, true); }
+        function clearDrafts() { localStorage.removeItem('draft_name'); localStorage.removeItem('draft_roll'); localStorage.removeItem('draft_code'); }
+        function saveAnswerLocal(qId, val) { let answers = JSON.parse(localStorage.getItem('exam_backup') || '{}'); answers[qId] = val; localStorage.setItem('exam_backup', JSON.stringify(answers)); }
+        function loadAnswersLocal() { let answers = JSON.parse(localStorage.getItem('exam_backup') || '{}'); for (const [qId, val] of Object.entries(answers)) { const el = document.querySelector(`input[name="q_${qId}"][value="${val}"]`); if(el) el.checked = true; } }
 
+        // --- INIT ---
         window.onload = async () => {
+            loadDrafts(); 
             const uid = localStorage.getItem('student_id');
             if(uid) {
                 const { data } = await supabase.from('students').select('*').eq('id', uid).single();
-                if(data && data.is_online) successLogin(data); // Only login if online is true
-                else localStorage.removeItem('student_id'); 
+                if(data && data.is_online) successLogin(data);
+                else {
+                    localStorage.removeItem('student_id'); // Ensure clean start if server says offline
+                }
             }
         };
 
+        // --- AUTH ---
         async function handleLogin() {
             const name = document.getElementById('login-name').value.trim();
             const roll = document.getElementById('login-roll').value.trim();
             const code = document.getElementById('login-code').value.trim();
             const btn = document.getElementById('login-btn');
 
-            if (!name || !roll || !code) return await customAlert("Please fill all fields!");
-            btn.disabled = true; btn.innerText = "Checking...";
+            if (!name || !roll || !code) return showAlert("Please fill all fields!");
+            btn.disabled = true; btn.innerText = "Verifying...";
 
             try {
                 let { data: existing } = await supabase.from('students').select('*').eq('roll_no', roll).single();
-
                 if (existing) {
                     if (existing.secret_code === code) {
                         await supabase.from('students').update({ is_online: true, name: name }).eq('id', existing.id);
                         existing.name = name;
                         successLogin(existing);
-                    } else {
-                        await customAlert("❌ Wrong Secret Code!");
-                        btn.disabled = false; btn.innerText = "Login 🔐";
-                    }
+                    } else { showAlert("❌ Invalid Code"); btn.disabled = false; btn.innerText = "Secure Login 🔐"; }
                 } else {
-                    const { data, error } = await supabase.from('students').insert({
-                        name: name, roll_no: roll, secret_code: code, is_online: true
-                    }).select().single();
+                    const { data, error } = await supabase.from('students').insert({ name: name, roll_no: roll, secret_code: code, is_online: true }).select().single();
                     if (error) throw error;
                     successLogin(data);
                 }
-            } catch (err) {
-                await customAlert("Error: " + err.message);
-                btn.disabled = false; btn.innerText = "Login 🔐";
-            }
+            } catch (err) { showAlert("Error: " + err.message); btn.disabled = false; btn.innerText = "Secure Login 🔐"; }
         }
 
         function successLogin(user) {
-            currentUser = user;
-            localStorage.setItem('student_id', user.id);
-            document.getElementById('dash-name').innerText = user.name;
+            clearDrafts(); currentUser = user; localStorage.setItem('student_id', user.id);
+            document.getElementById('dash-name').innerText = user.name.split(' ')[0];
             switchView('view-dashboard');
             checkExamStatus();
-            startRealtimeListener();
+            setupRealtime();
         }
 
         async function handleLogout(forced = false) {
-            if(currentUser && !forced) {
-                await supabase.from('students').update({ is_online: false }).eq('id', currentUser.id);
-            }
-            localStorage.removeItem('student_id');
+            if(redirectIntv) clearInterval(redirectIntv);
+            if(currentUser && !forced) await supabase.from('students').update({ is_online: false }).eq('id', currentUser.id);
             
+            // CLEANUP EVERYTHING ON LOGOUT/KICK
+            localStorage.removeItem('student_id'); 
+            localStorage.removeItem('exam_backup'); // Clear backup too
             currentUser = null;
-            document.getElementById('login-name').value = "";
-            document.getElementById('login-roll').value = "";
-            document.getElementById('login-code').value = "";
-            document.getElementById('login-btn').disabled = false;
-            document.getElementById('login-btn').innerText = "Login 🔐";
             
             switchView('view-login');
-
-            if(forced) customAlert("⚠️ Teacher has logged you out.");
+            if(forced) showAlert("⚠️ Session Ended (Logged out by Admin)");
+            document.getElementById('login-btn').disabled = false; document.getElementById('login-btn').innerText = "Secure Login 🔐";
         }
 
-        // --- REALTIME LISTENER (MAGIC FIX) ---
-        function startRealtimeListener() {
-            supabase.channel('student_channel')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'exam_state' }, payload => {
+        // --- EXAM LOGIC ---
+        function setupRealtime() {
+            supabase.channel('student_chan').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'exam_state' }, payload => {
                 if(payload.new.status === 'started') startExam(payload.new);
                 if(payload.new.status === 'ended') forceSubmit();
-            })
-            // THIS LISTENS FOR KICK COMMANDS
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' }, payload => {
-                if(currentUser && payload.new.id === currentUser.id) {
-                    if(payload.new.is_online === false) {
-                        // Teacher set is_online = false, so we force logout
-                        handleLogout(true);
-                    }
-                }
-            })
-            .subscribe();
+            }).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' }, payload => {
+                if(currentUser && payload.new.id === currentUser.id && !payload.new.is_online) handleLogout(true);
+            }).subscribe();
         }
 
         async function checkExamStatus() {
@@ -288,156 +297,179 @@
             if(data && data.status === 'started') startExam(data);
         }
 
+        // ---------- UPGRADED LOGIC: PREVENT RE-ENTRY ----------
         async function startExam(state) {
             if(document.getElementById('view-exam').classList.contains('active')) return;
-            currentExamName = state.exam_name || "Exam";
-            document.getElementById('exam-title').innerText = currentExamName;
-            const { data } = await supabase.from('questions').select('*');
-            examQuestions = data;
+
+            // 1. CHECK IF ALREADY SUBMITTED
+            const { data: history } = await supabase.from('exam_history')
+                .select('id')
+                .eq('student_roll', currentUser.roll_no)
+                .eq('exam_name', state.exam_name) // Simple check by name
+                .limit(1);
+
+            if (history && history.length > 0) {
+                document.getElementById('exam-status-text').innerText = "✅ Exam Already Completed (Wait for results)";
+                return; // STOP HERE, DO NOT START
+            }
             
+            enableAntiCheat();
+            currentExamName = state.exam_name;
+            document.getElementById('exam-title').innerText = currentExamName;
+            document.getElementById('exam-status-text').innerText = "🔥 Exam in Progress...";
+            
+            // FETCH QUESTIONS (Snapshot vs Live)
+            if(state.linked_queue_id) {
+                const { data } = await supabase.from('exam_queue').select('question_snapshot').eq('id', state.linked_queue_id).single();
+                examQuestions = (data && data.question_snapshot) ? data.question_snapshot : [];
+            } else {
+                const { data } = await supabase.from('questions').select('*').is('queue_id', null);
+                examQuestions = data || [];
+            }
+            
+            // RENDER
             const div = document.getElementById('questions-area');
-            div.innerHTML = data.map((q, i) => `
-                <div class="question-box">
-                    <p><strong>Q${i+1}. ${q.question_text}</strong></p>
-                    ${q.image_url ? `<img src="${q.image_url}" class="q-img">` : ''}
-                    <label class="opt-label"><input type="radio" name="q_${q.id}" value="A"> <span>A) ${q.option_a}</span></label>
-                    <label class="opt-label"><input type="radio" name="q_${q.id}" value="B"> <span>B) ${q.option_b}</span></label>
-                    <label class="opt-label"><input type="radio" name="q_${q.id}" value="C"> <span>C) ${q.option_c}</span></label>
-                    <label class="opt-label"><input type="radio" name="q_${q.id}" value="D"> <span>D) ${q.option_d}</span></label>
-                </div>
-            `).join('');
+            if(!examQuestions || examQuestions.length === 0) {
+                div.innerHTML = "<div style='text-align:center; padding:20px; color:gray;'>No questions found. Waiting for teacher...</div>";
+            } else {
+                div.innerHTML = examQuestions.map((q, i) => `
+                    <div class="question-box">
+                        <p style="font-weight:600; margin-bottom:10px;">Q${i+1}. ${q.question_text}</p>
+                        ${q.image_url ? `<img src="${q.image_url}" class="q-img">` : ''}
+                        <label class="opt-label"><input type="radio" name="q_${q.id}" value="A" onchange="saveAnswerLocal('${q.id}', 'A')"> <span>A) ${q.option_a}</span></label>
+                        <label class="opt-label"><input type="radio" name="q_${q.id}" value="B" onchange="saveAnswerLocal('${q.id}', 'B')"> <span>B) ${q.option_b}</span></label>
+                        <label class="opt-label"><input type="radio" name="q_${q.id}" value="C" onchange="saveAnswerLocal('${q.id}', 'C')"> <span>C) ${q.option_c}</span></label>
+                        <label class="opt-label"><input type="radio" name="q_${q.id}" value="D" onchange="saveAnswerLocal('${q.id}', 'D')"> <span>D) ${q.option_d}</span></label>
+                    </div>
+                `).join('');
+            }
 
             switchView('view-exam');
-            document.getElementById('timer-float').style.display = 'block';
+            loadAnswersLocal(); 
+            
             const end = new Date(state.start_time).getTime() + (state.duration_minutes * 60000);
+            document.getElementById('timer-float').style.display = 'block';
             if(examTimer) clearInterval(examTimer);
             examTimer = setInterval(() => {
-                const now = new Date().getTime();
-                const diff = end - now;
-                if (diff <= 0) {
-                    clearInterval(examTimer);
-                    document.getElementById('timer-float').innerText = "00:00";
-                    forceSubmit();
-                } else {
-                    const m = Math.floor(diff / 60000);
-                    const s = Math.floor((diff % 60000) / 1000);
+                const diff = end - new Date().getTime();
+                if (diff <= 0) { clearInterval(examTimer); forceSubmit(); }
+                else {
+                    const m = Math.floor(diff/60000); const s = Math.floor((diff%60000)/1000);
                     document.getElementById('timer-float').innerText = `${m}:${s<10?'0'+s:s}`;
                 }
             }, 1000);
         }
+        // -----------------------------------------------------------------
 
         async function submitExam(auto = false) {
-            if(!auto && !await customConfirm("Are you sure you want to submit?")) return;
-            await processResult();
+            if(!auto && !await showConfirm("Submit Answers?")) return;
+            processResult(false);
         }
 
-        async function forceSubmit() {
-            if(document.getElementById('view-exam').classList.contains('active')) {
-                await customAlert("⏳ Time's up! Submitting answers...");
-                await processResult();
+        // ---------- STRICT ANTI-CHEAT TRIGGER ----------
+        async function forceSubmit(cheat = false) {
+            if(!document.getElementById('view-exam').classList.contains('active')) return;
+            
+            // Stop everything immediately
+            clearInterval(examTimer); 
+            disableAntiCheat();
+            document.getElementById('timer-float').style.display = 'none';
+
+            // Submit logic
+            processResult(cheat);
+        }
+
+        async function processResult(isDQ = false) {
+            // Save to DB
+            let score = 0, details = [];
+            if(!isDQ) {
+                examQuestions.forEach(q => {
+                    const ans = document.querySelector(`input[name="q_${q.id}"]:checked`)?.value || "Skipped";
+                    const correct = (ans === q.correct_option);
+                    if(correct) score++;
+                    details.push({ question: q.question_text, img: q.image_url, user: ans, real: q.correct_option, is_correct: correct });
+                });
+            } else {
+                details = [{ question: "System", user: "Disqualified (Tab Switch)", real: "-", is_correct: false }];
+            }
+
+            // Insert Record
+            await supabase.from('exam_history').insert({
+                student_name: currentUser.name, student_roll: currentUser.roll_no, secret_code: currentUser.secret_code,
+                exam_name: currentExamName + (isDQ?" (DQ)":""), score: score, total_marks: examQuestions.length, full_details: details
+            });
+
+            localStorage.removeItem('exam_backup'); 
+            
+            // SPECIAL HANDLING FOR CHEATERS
+            if(isDQ) {
+                // Show Popup and Kick to Dashboard
+                await showAlert("⚠️ You are trying to cheat! Exam Disqualified.");
+                document.getElementById('exam-status-text').innerText = "🚫 Disqualified";
+                switchView('view-dashboard');
+            } else {
+                // Normal Success View
+                document.getElementById('res-score').innerText = score; document.getElementById('res-total').innerText = examQuestions.length;
+                switchView('view-result');
+                document.getElementById('exam-status-text').innerText = "✅ Exam Submitted";
+                
+                let t = 10;
+                redirectIntv = setInterval(() => {
+                    t--; document.getElementById('redirect-time').innerText = t;
+                    if(t<=0) { clearInterval(redirectIntv); switchView('view-dashboard'); }
+                }, 1000);
             }
         }
 
-        async function processResult() {
-            clearInterval(examTimer);
-            document.getElementById('timer-float').style.display = 'none';
+        function enableAntiCheat() {
+            // 0 Tolerance: Trigger on FIRST hidden event
+            document.documentElement.requestFullscreen().catch(e=>{});
+            document.addEventListener("visibilitychange", checkTab);
+        }
+        function disableAntiCheat() {
+            document.removeEventListener("visibilitychange", checkTab);
+            if(document.fullscreenElement) document.exitFullscreen().catch(e=>{});
+        }
+        
+        // ---------- 0 WARNING LOGIC ----------
+        function checkTab() {
+            if(document.hidden) {
+                forceSubmit(true); // IMMEDIATE DQ
+            }
+        }
 
-            let score = 0;
-            let details = [];
-            examQuestions.forEach(q => {
-                const sel = document.querySelector(`input[name="q_${q.id}"]:checked`);
-                const ans = sel ? sel.value : "Skipped";
-                const isCorrect = (ans === q.correct_option);
-                if(isCorrect) score++;
-                details.push({ question: q.question_text, img: q.image_url, user: ans, real: q.correct_option, is_correct: isCorrect });
-            });
-
-            await supabase.from('exam_history').insert({
-                student_name: currentUser.name || "Student",
-                student_roll: currentUser.roll_no,
-                secret_code: currentUser.secret_code,
-                exam_name: currentExamName,
-                score: score,
-                total_marks: examQuestions.length,
-                full_details: details
-            });
-
-            document.getElementById('res-score').innerText = score;
-            document.getElementById('res-total').innerText = examQuestions.length;
-            switchView('view-result');
-
-            let timeLeft = 10;
-            const timerSpan = document.getElementById('redirect-time');
-            const redirInterval = setInterval(() => {
-                timeLeft--;
-                timerSpan.innerText = timeLeft;
-                if(timeLeft <= 0) {
-                    clearInterval(redirInterval);
-                    switchView('view-dashboard');
-                }
-            }, 1000);
+        async function openSchedule() {
+            showModal('📅 Exam Schedule', 'Loading...');
+            const { data } = await supabase.from('exam_queue').select('*').eq('status', 'pending').order('scheduled_at', {ascending: true});
+            const html = (data && data.length) ? data.map(ex => `
+                <div class="list-item">
+                    <div style="font-weight:600; color:var(--primary);">${ex.exam_name}</div>
+                    <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">
+                        ${new Date(ex.scheduled_at).toLocaleString()} • ${ex.duration_minutes} mins
+                    </div>
+                </div>`).join('') : '<div style="padding:20px; text-align:center; color:#94a3b8;">No exams scheduled</div>';
+            document.getElementById('modal-body').innerHTML = html;
         }
 
         async function openHistory() {
-            const m = document.getElementById('history-modal');
-            m.style.display = 'flex';
-            setTimeout(() => m.classList.add('show'), 10);
-            const div = document.getElementById('history-list');
-            document.getElementById('hist-title').innerText = "📜 My History";
-            div.innerHTML = "Loading records...";
+            showModal('📜 Past Results', 'Loading...');
             const { data } = await supabase.from('exam_history').select('*').eq('student_roll', currentUser.roll_no).order('created_at', {ascending: false});
-            if(!data || !data.length) { div.innerHTML = "No history found."; return; }
-            myHistoryData = data;
-            div.innerHTML = data.map((h, index) => `
-                <div class="history-card" onclick="showHistoryDetails(${index})">
+            const html = (data && data.length) ? data.map(h => `
+                <div class="list-item">
                     <div style="display:flex; justify-content:space-between;">
                         <strong>${h.exam_name}</strong>
-                        <span style="font-weight:bold; color:${h.score/h.total_marks >= 0.4 ? 'var(--green)' : 'var(--red)'}">
-                            ${h.score} / ${h.total_marks}
-                        </span>
+                        <span style="font-weight:bold; color:${h.score/h.total_marks>=0.4?'var(--success)':'var(--danger)'}">${h.score}/${h.total_marks}</span>
                     </div>
-                    <div style="font-size:12px; color:#64748b; margin-top:5px;">
-                        ${new Date(h.created_at).toLocaleString()} <br>
-                        <span style="color:var(--accent)">Tap to view Answer Sheet 👉</span>
-                    </div>
-                </div>
-            `).join('');
+                    <div style="font-size:12px; color:#94a3b8;">${new Date(h.created_at).toLocaleDateString()}</div>
+                </div>`).join('') : '<div style="padding:20px; text-align:center; color:#94a3b8;">No history found</div>';
+            document.getElementById('modal-body').innerHTML = html;
         }
 
-        window.showHistoryDetails = (index) => {
-            const exam = myHistoryData[index];
-            const div = document.getElementById('history-list');
-            const title = document.getElementById('hist-title');
-            title.innerText = `📝 ${exam.exam_name}`;
-            let html = `<button onclick="openHistory()" class="btn-small" style="background:#64748b; margin-bottom:15px; color:white;">← Back to List</button>`;
-            if(exam.full_details) {
-                html += exam.full_details.map((d, i) => `
-                    <div class="hist-q-box">
-                        <p style="font-weight:bold; margin:0 0 10px 0;">Q${i+1}. ${d.question}</p>
-                        ${d.img ? `<img src="${d.img}" style="max-width:100%; height:auto; border-radius:5px; margin-bottom:10px;">` : ''}
-                        <div class="hist-res-row">
-                            ${d.is_correct 
-                                ? `<span class="badge badge-success">✅ You Selected: ${d.user}</span>`
-                                : `<span class="badge badge-fail">❌ You Selected: ${d.user}</span> 
-                                   <span class="badge badge-success">Correct: ${d.real}</span>`
-                            }
-                        </div>
-                    </div>
-                `).join('');
-            } else { html += "<p>Detailed report not available.</p>"; }
-            div.innerHTML = html;
-        }
-
-        function closeHistory() {
-            const m = document.getElementById('history-modal');
-            m.classList.remove('show');
-            setTimeout(() => m.style.display = 'none', 300);
-        }
-
-        function switchView(id) {
-            document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-        }
+        function switchView(id) { document.querySelectorAll('.view').forEach(el => el.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+        function showModal(title, content) { document.getElementById('modal-title').innerText = title; document.getElementById('modal-body').innerHTML = content; document.getElementById('modal-list').classList.add('show'); }
+        function closeModal() { document.getElementById('modal-list').classList.remove('show'); }
+        function showAlert(msg) { return new Promise(r => { document.getElementById('alert-text').innerText = msg; document.getElementById('alert-cancel').style.display = 'none'; document.getElementById('custom-alert').classList.add('show'); document.getElementById('alert-ok').onclick = () => { document.getElementById('custom-alert').classList.remove('show'); r(); }; }); }
+        function showConfirm(msg) { return new Promise(r => { document.getElementById('alert-text').innerText = msg; document.getElementById('alert-cancel').style.display = 'inline-block'; document.getElementById('custom-alert').classList.add('show'); document.getElementById('alert-ok').onclick = () => { document.getElementById('custom-alert').classList.remove('show'); r(true); }; document.getElementById('alert-cancel').onclick = () => { document.getElementById('custom-alert').classList.remove('show'); r(false); }; }); }
     </script>
 </body>
 </html>
