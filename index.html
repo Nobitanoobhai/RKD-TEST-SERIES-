@@ -228,6 +228,7 @@
         let examTimer = null;
         let currentExamName = "Exam";
         let redirectIntv = null;
+        let statusPolling = null; // <-- LEO FIX: Global Polling variable added
         
         // --- PERSISTENCE ---
         function saveDraft(key, val) { localStorage.setItem('draft_'+key, val); }
@@ -285,10 +286,19 @@
             switchView('view-dashboard');
             checkExamStatus(); 
             setupRealtime();   
+            
+            // <-- LEO FIX: Start Polling for Fallback
+            if(statusPolling) clearInterval(statusPolling);
+            statusPolling = setInterval(async () => {
+                if (document.getElementById('view-dashboard').classList.contains('active')) {
+                    checkExamStatus();
+                }
+            }, 8000); // Check every 8 seconds
         }
 
         async function handleLogout(forced = false) {
             if(redirectIntv) clearInterval(redirectIntv);
+            if(statusPolling) clearInterval(statusPolling); // <-- LEO FIX: Stop Polling
             if(currentUser && !forced) await supabase.from('students').update({ is_online: false }).eq('id', currentUser.id);
             localStorage.removeItem('student_id'); 
             localStorage.removeItem('exam_backup'); 
@@ -337,31 +347,22 @@
             const { data: history } = await supabase.from('exam_history')
                 .select('id')
                 .eq('student_roll', currentUser.roll_no)
-                .ilike('exam_name', state.exam_name + '%') // <--- FIXED THIS LINE
+                .ilike('exam_name', state.exam_name + '%') 
                 .limit(1);
 
             // 2. BLOCK if history exists
             if (history && history.length > 0) {
                 document.getElementById('exam-status-text').innerText = "🚫 Disqualified / Completed";
-                
-                // If they sneaked in, kick them out
                 if(document.getElementById('view-exam').classList.contains('active')) {
                     switchView('view-dashboard');
                 }
-                
-                // If they are on dashboard, show popup
-                if(document.getElementById('view-dashboard').classList.contains('active')) {
-                    // Optional: You can uncomment this if you want a popup every time they refresh
-                    // showAlert("⚠️ You have already completed/DQ'd from this exam.");
-                }
-                
                 return; // STOP.
             }
             
             // 3. IF NO HISTORY -> Safe to Enter
             if(document.getElementById('view-exam').classList.contains('active')) return;
 
-            enableAntiCheat();
+            // enableAntiCheat(); // <-- LEO TEST: Temporarily removed Anti-Cheat call
             currentExamName = state.exam_name;
             document.getElementById('exam-title').innerText = currentExamName;
             document.getElementById('exam-status-text').innerText = "🔥 Exam in Progress...";
@@ -411,10 +412,10 @@
             processResult(false);
         }
 
-        // ---------- STRICT ANTI-CHEAT ----------
+        // ---------- STRICT ANTI-CHEAT (Functions Kept, but logic removed for isolation test) ----------
         async function forceSubmit(cheat = false) {
             clearInterval(examTimer); 
-            disableAntiCheat();
+            // disableAntiCheat(); // <-- LEO TEST: Temporarily removed Anti-Cheat call
             document.getElementById('timer-float').style.display = 'none';
             processResult(cheat);
         }
@@ -444,7 +445,6 @@
             localStorage.removeItem('exam_backup'); 
             
             if(isDQ) {
-                // IMPORTANT: Show alert BEFORE switching view to ensure they see it
                 await showAlert("⚠️ Cheating Detected! Exam Disqualified.");
                 switchView('view-dashboard');
                 document.getElementById('exam-status-text').innerText = "🚫 Disqualified";
@@ -462,12 +462,14 @@
         }
 
         function enableAntiCheat() {
-            document.documentElement.requestFullscreen().catch(e=>{});
-            document.addEventListener("visibilitychange", checkTab);
+             // <-- LEO TEST: Logic commented out for Isolation Test
+             // document.documentElement.requestFullscreen().catch(e=>{});
+             // document.addEventListener("visibilitychange", checkTab);
         }
         function disableAntiCheat() {
-            document.removeEventListener("visibilitychange", checkTab);
-            if(document.fullscreenElement) document.exitFullscreen().catch(e=>{});
+             // <-- LEO TEST: Logic commented out for Isolation Test
+             // document.removeEventListener("visibilitychange", checkTab);
+             // if(document.fullscreenElement) document.exitFullscreen().catch(e=>{});
         }
         
         function checkTab() {
@@ -503,7 +505,15 @@
             document.getElementById('modal-body').innerHTML = html;
         }
 
-        function switchView(id) { document.querySelectorAll('.view').forEach(el => el.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+        function switchView(id) { 
+            document.querySelectorAll('.view').forEach(el => el.classList.remove('active')); 
+            document.getElementById(id).classList.add('active'); 
+            
+            // <-- LEO FIX: Immediate check when returning to dashboard
+            if (id === 'view-dashboard') {
+                 checkExamStatus();
+            }
+        }
         function showModal(title, content) { document.getElementById('modal-title').innerText = title; document.getElementById('modal-body').innerHTML = content; document.getElementById('modal-list').classList.add('show'); }
         function closeModal() { document.getElementById('modal-list').classList.remove('show'); }
         function showAlert(msg) { return new Promise(r => { document.getElementById('alert-text').innerText = msg; document.getElementById('alert-cancel').style.display = 'none'; document.getElementById('custom-alert').classList.add('show'); document.getElementById('alert-ok').onclick = () => { document.getElementById('custom-alert').classList.remove('show'); r(); }; }); }
