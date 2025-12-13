@@ -362,7 +362,7 @@
             // 3. IF NO HISTORY -> Safe to Enter
             if(document.getElementById('view-exam').classList.contains('active')) return;
 
-            // enableAntiCheat(); // <-- LEO TEST: Temporarily removed Anti-Cheat call
+            enableAntiCheat(); // <-- LEO FIX: Anti-Cheat Re-enabled with new logic
             currentExamName = state.exam_name;
             document.getElementById('exam-title').innerText = currentExamName;
             document.getElementById('exam-status-text').innerText = "🔥 Exam in Progress...";
@@ -412,10 +412,10 @@
             processResult(false);
         }
 
-        // ---------- STRICT ANTI-CHEAT (Functions Kept, but logic removed for isolation test) ----------
+        // ---------- STRICT ANTI-CHEAT (POLISHED) ----------
         async function forceSubmit(cheat = false) {
             clearInterval(examTimer); 
-            // disableAntiCheat(); // <-- LEO TEST: Temporarily removed Anti-Cheat call
+            disableAntiCheat(); // <-- LEO FIX: Anti-Cheat Re-enabled with new logic
             document.getElementById('timer-float').style.display = 'none';
             processResult(cheat);
         }
@@ -461,15 +461,28 @@
             }
         }
 
+        function preventDefault(e) { e.preventDefault(); } // <-- LEO FIX: Added helper for copy/paste
+        
         function enableAntiCheat() {
-             // <-- LEO TEST: Logic commented out for Isolation Test
-             // document.documentElement.requestFullscreen().catch(e=>{});
-             // document.addEventListener("visibilitychange", checkTab);
+            // Fullscreen removed for iOS compatibility. Tab/Copy/Paste added back.
+            document.addEventListener("visibilitychange", checkTab);
+            
+            const examView = document.getElementById('view-exam');
+            if (examView) {
+                examView.addEventListener('copy', preventDefault, true);
+                examView.addEventListener('paste', preventDefault, true);
+                examView.addEventListener('cut', preventDefault, true);
+            }
         }
         function disableAntiCheat() {
-             // <-- LEO TEST: Logic commented out for Isolation Test
-             // document.removeEventListener("visibilitychange", checkTab);
-             // if(document.fullscreenElement) document.exitFullscreen().catch(e=>{});
+            document.removeEventListener("visibilitychange", checkTab);
+            
+            const examView = document.getElementById('view-exam');
+            if (examView) {
+                examView.removeEventListener('copy', preventDefault, true);
+                examView.removeEventListener('paste', preventDefault, true);
+                examView.removeEventListener('cut', preventDefault, true);
+            }
         }
         
         function checkTab() {
