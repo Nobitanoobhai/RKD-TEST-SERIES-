@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <title>Student Exam Portal</title>
+    <!-- Supabase Library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -221,14 +222,16 @@
         // --- CONFIG ---
         const SUPABASE_URL = 'https://byezxlkkckbliduofdco.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5ZXp4bGtrY2tibGlkdW9mZGNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMzQ2MjUsImV4cCI6MjA3OTcxMDYyNX0._HEdU0IxVH4RPsdejJsY5gd9uKO7fdaNTILYxhXaZl0';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        // FIXED: Renamed to 'studentClient' to avoid conflict with the library variable
+        const studentClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let currentUser = null;
         let examQuestions = [];
         let examTimer = null;
         let currentExamName = "Exam";
         let redirectIntv = null;
-        let statusPolling = null; // <-- LEO FIX: Global Polling variable added
+        let statusPolling = null; 
         
         // --- PERSISTENCE ---
         function saveDraft(key, val) { localStorage.setItem('draft_'+key, val); }
@@ -246,7 +249,7 @@
             loadDrafts(); 
             const uid = localStorage.getItem('student_id');
             if(uid) {
-                const { data } = await supabase.from('students').select('*').eq('id', uid).single();
+                const { data } = await studentClient.from('students').select('*').eq('id', uid).single();
                 if(data && data.is_online) successLogin(data);
                 else {
                     localStorage.removeItem('student_id');
@@ -265,15 +268,15 @@
             btn.disabled = true; btn.innerText = "Verifying...";
 
             try {
-                let { data: existing } = await supabase.from('students').select('*').eq('roll_no', roll).single();
+                let { data: existing } = await studentClient.from('students').select('*').eq('roll_no', roll).single();
                 if (existing) {
                     if (existing.secret_code === code) {
-                        await supabase.from('students').update({ is_online: true, name: name }).eq('id', existing.id);
+                        await studentClient.from('students').update({ is_online: true, name: name }).eq('id', existing.id);
                         existing.name = name;
                         successLogin(existing);
                     } else { showAlert("❌ Invalid Code"); btn.disabled = false; btn.innerText = "Secure Login 🔐"; }
                 } else {
-                    const { data, error } = await supabase.from('students').insert({ name: name, roll_no: roll, secret_code: code, is_online: true }).select().single();
+                    const { data, error } = await studentClient.from('students').insert({ name: name, roll_no: roll, secret_code: code, is_online: true }).select().single();
                     if (error) throw error;
                     successLogin(data);
                 }
@@ -287,19 +290,18 @@
             checkExamStatus(); 
             setupRealtime();   
             
-            // <-- LEO FIX: Start Polling for Fallback
             if(statusPolling) clearInterval(statusPolling);
             statusPolling = setInterval(async () => {
                 if (document.getElementById('view-dashboard').classList.contains('active')) {
                     checkExamStatus();
                 }
-            }, 8000); // Check every 8 seconds
+            }, 8000); 
         }
 
         async function handleLogout(forced = false) {
             if(redirectIntv) clearInterval(redirectIntv);
-            if(statusPolling) clearInterval(statusPolling); // <-- LEO FIX: Stop Polling
-            if(currentUser && !forced) await supabase.from('students').update({ is_online: false }).eq('id', currentUser.id);
+            if(statusPolling) clearInterval(statusPolling); 
+            if(currentUser && !forced) await studentClient.from('students').update({ is_online: false }).eq('id', currentUser.id);
             localStorage.removeItem('student_id'); 
             localStorage.removeItem('exam_backup'); 
             currentUser = null;
@@ -310,19 +312,17 @@
 
         // --- EXAM LOGIC & REALTIME SYNC ---
         function setupRealtime() {
-            supabase.channel('student_chan').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'exam_state' }, payload => {
+            studentClient.channel('student_chan').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'exam_state' }, payload => {
                 
-                // 1. If Exam Starts -> Try to Join
                 if(payload.new.status === 'started') {
                     checkExamStatus(); 
                 }
                 
-                // 2. If Exam Ends (Stopped by Teacher) -> Force everyone to Dashboard
                 if(payload.new.status === 'ended') {
                     console.log("Teacher Stopped Exam");
                     
                     if(document.getElementById('view-exam').classList.contains('active')) {
-                        forceSubmit(false); // Auto-submit if inside
+                        forceSubmit(false); 
                         showAlert("🛑 Teacher stopped the exam.");
                     } else {
                         document.getElementById('exam-status-text').innerText = "Waiting for Teacher...";
@@ -335,43 +335,38 @@
         }
 
         async function checkExamStatus() {
-            const { data } = await supabase.from('exam_state').select('*').eq('id', 1).single();
+            const { data } = await studentClient.from('exam_state').select('*').eq('id', 1).single();
             if(data && data.status === 'started') startExam(data);
             else document.getElementById('exam-status-text').innerText = "Waiting for Teacher...";
         }
 
-        // ---------- FIXED: DB SEARCH LOGIC ----------
         async function startExam(state) {
-            // 1. REFRESH CHECK: Use ILIKE (Pattern Match) to find "Unit Test" OR "Unit Test (DQ)"
-            // This is the Magic Fix: It finds any exam starting with this name
-            const { data: history } = await supabase.from('exam_history')
+            const { data: history } = await studentClient.from('exam_history')
                 .select('id')
                 .eq('student_roll', currentUser.roll_no)
                 .ilike('exam_name', state.exam_name + '%') 
                 .limit(1);
 
-            // 2. BLOCK if history exists
             if (history && history.length > 0) {
                 document.getElementById('exam-status-text').innerText = "🚫 Disqualified / Completed";
                 if(document.getElementById('view-exam').classList.contains('active')) {
                     switchView('view-dashboard');
                 }
-                return; // STOP.
+                return; 
             }
             
-            // 3. IF NO HISTORY -> Safe to Enter
             if(document.getElementById('view-exam').classList.contains('active')) return;
 
-            enableAntiCheat(); // <-- LEO FIX: Anti-Cheat Re-enabled with new logic
+            enableAntiCheat(); 
             currentExamName = state.exam_name;
             document.getElementById('exam-title').innerText = currentExamName;
             document.getElementById('exam-status-text').innerText = "🔥 Exam in Progress...";
             
             if(state.linked_queue_id) {
-                const { data } = await supabase.from('exam_queue').select('question_snapshot').eq('id', state.linked_queue_id).single();
+                const { data } = await studentClient.from('exam_queue').select('question_snapshot').eq('id', state.linked_queue_id).single();
                 examQuestions = (data && data.question_snapshot) ? data.question_snapshot : [];
             } else {
-                const { data } = await supabase.from('questions').select('*').is('queue_id', null);
+                const { data } = await studentClient.from('questions').select('*').is('queue_id', null);
                 examQuestions = data || [];
             }
             
@@ -412,10 +407,9 @@
             processResult(false);
         }
 
-        // ---------- STRICT ANTI-CHEAT (POLISHED) ----------
         async function forceSubmit(cheat = false) {
             clearInterval(examTimer); 
-            disableAntiCheat(); // <-- LEO FIX: Anti-Cheat Re-enabled with new logic
+            disableAntiCheat(); 
             document.getElementById('timer-float').style.display = 'none';
             processResult(cheat);
         }
@@ -437,7 +431,7 @@
             }
 
             // INSERT INTO DB
-            await supabase.from('exam_history').insert({
+            await studentClient.from('exam_history').insert({
                 student_name: currentUser.name, student_roll: currentUser.roll_no, secret_code: currentUser.secret_code,
                 exam_name: currentExamName + (isDQ?" (DQ)":""), score: score, total_marks: examQuestions.length, full_details: details
             });
@@ -461,12 +455,10 @@
             }
         }
 
-        function preventDefault(e) { e.preventDefault(); } // <-- LEO FIX: Added helper for copy/paste
+        function preventDefault(e) { e.preventDefault(); } 
         
         function enableAntiCheat() {
-            // Fullscreen removed for iOS compatibility. Tab/Copy/Paste added back.
             document.addEventListener("visibilitychange", checkTab);
-            
             const examView = document.getElementById('view-exam');
             if (examView) {
                 examView.addEventListener('copy', preventDefault, true);
@@ -476,7 +468,6 @@
         }
         function disableAntiCheat() {
             document.removeEventListener("visibilitychange", checkTab);
-            
             const examView = document.getElementById('view-exam');
             if (examView) {
                 examView.removeEventListener('copy', preventDefault, true);
@@ -493,7 +484,7 @@
 
         async function openSchedule() {
             showModal('📅 Exam Schedule', 'Loading...');
-            const { data } = await supabase.from('exam_queue').select('*').eq('status', 'pending').order('scheduled_at', {ascending: true});
+            const { data } = await studentClient.from('exam_queue').select('*').eq('status', 'pending').order('scheduled_at', {ascending: true});
             const html = (data && data.length) ? data.map(ex => `
                 <div class="list-item">
                     <div style="font-weight:600; color:var(--primary);">${ex.exam_name}</div>
@@ -506,7 +497,7 @@
 
         async function openHistory() {
             showModal('📜 Past Results', 'Loading...');
-            const { data } = await supabase.from('exam_history').select('*').eq('student_roll', currentUser.roll_no).order('created_at', {ascending: false});
+            const { data } = await studentClient.from('exam_history').select('*').eq('student_roll', currentUser.roll_no).order('created_at', {ascending: false});
             const html = (data && data.length) ? data.map(h => `
                 <div class="list-item">
                     <div style="display:flex; justify-content:space-between;">
@@ -522,7 +513,6 @@
             document.querySelectorAll('.view').forEach(el => el.classList.remove('active')); 
             document.getElementById(id).classList.add('active'); 
             
-            // <-- LEO FIX: Immediate check when returning to dashboard
             if (id === 'view-dashboard') {
                  checkExamStatus();
             }
